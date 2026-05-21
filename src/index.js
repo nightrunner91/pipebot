@@ -11,12 +11,16 @@ process.on('unhandledRejection', (reason, promise) => {
     logError('FATAL: Unhandled Rejection', reason);
 });
 
+let parsedPort = parseInt(process.env.PORT || '3000', 10);
+if (isNaN(parsedPort)) {
+    parsedPort = 3000;
+}
+
 const config = {
     botToken: process.env.TELEGRAM_BOT_TOKEN,
     groupId: process.env.TELEGRAM_GROUP_ID,
     gitlabSecret: process.env.GITLAB_WEBHOOK_SECRET,
-    // Parse to ensure Express doesn't treat this as a pipe
-    port: parseInt(process.env.PORT || '3000', 10)
+    port: parsedPort
 };
 
 if (!config.botToken || !config.groupId) {
@@ -35,9 +39,9 @@ async function start() {
     try {
         logInfo('Telegram bot initialized (polling disabled)');
 
-        // Explicitly bind to '::' (IPv6 wildcard) because Railway's internal proxy operates EXCLUSIVELY on IPv6
-        app.listen(config.port, '::', () => {
-            logInfo(`Webhook server listening on ::${config.port} (IPv6)`);
+        // Explicitly bind to 0.0.0.0 to satisfy Docker/Railway IPv4 proxy requirements
+        app.listen(config.port, '0.0.0.0', () => {
+            logInfo(`Webhook server listening on 0.0.0.0:${config.port}`);
         });
 
         // Graceful Shutdown
