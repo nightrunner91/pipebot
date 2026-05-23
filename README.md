@@ -31,8 +31,8 @@
   - [Environment Variables](#environment-variables)
   - [Multi-Repository Mode](#multi-repository-mode)
   - [Alert Styles](#alert-styles)
-  - [GitLab Webhook Setup](#gitlab-webhook-setup)
-  - [Railway Deployment](#railway-deployment)
+- [GitLab Webhook Setup](#gitlab-webhook-setup)
+- [Deployment](#deployment)
 - [Usage](#usage)
   - [Running Locally](#running-locally)
   - [Webhook Endpoint](#webhook-endpoint)
@@ -43,22 +43,20 @@
 
 ## Project Overview
 
-**Pipeline Alertbot** is a lightweight, production-ready webhook relay that bridges GitLab CI/CD pipeline events to Telegram group chats. It receives pipeline webhooks from GitLab, formats them into readable notifications, and sends them to designated Telegram chats in real time.
-
-The bot supports **multi-repository mode**, allowing you to monitor multiple GitLab projects and route alerts to different Telegram groups. Each repository can have its own custom display name, alert style, and webhook secret. It deploys seamlessly to platforms like Railway.
+**Pipeline Alertbot** is a lightweight, production-ready webhook relay that bridges GitLab CI/CD pipeline events to Telegram group chats. It receives pipeline webhooks from GitLab, formats them into readable notifications, and sends them to designated Telegram chats in real time. The bot supports **multi-repository mode**, allowing you to monitor multiple GitLab projects and route alerts to different Telegram groups. 
 
 ## Features
 
-- **Multi-repository support** -- Monitor many GitLab projects and route alerts to different Telegram chats
-- **Custom project names** -- Override GitLab project names with your own display names in alerts
-- **Per-repo alert styles** -- Each repository can use a different notification format (card, badge, or minimal)
-- **Real-time pipeline alerts** -- Receive instant notifications for running, successful, failed, and canceled pipelines
-- **Inline keyboard buttons** -- Quick-access links to the pipeline, commit, and repository directly in Telegram
-- **Secure webhook validation** -- Validates incoming requests using per-repository secret tokens
-- **Multi-port binding** -- Automatically binds to multiple ports for compatibility with Railway's dynamic port routing
-- **Graceful error handling** -- Global uncaught exception and unhandled rejection handlers prevent silent crashes
-- **Diagnostics endpoint** -- Health check endpoint that reports configuration status without exposing secrets
-- **Zero-downtime startup** -- Bot initializes independently from the webhook server; missing credentials do not block server startup
+- **Multi-repository support** - Monitor many GitLab projects and route alerts to different Telegram chats
+- **Custom project names** - Override GitLab project names with your own display names in alerts
+- **Per-repo alert styles** - Each repository can use a different notification format (card, badge, or minimal)
+- **Real-time pipeline alerts** - Receive instant notifications for running, successful, failed, and canceled pipelines
+- **Inline keyboard buttons** - Quick-access links to the pipeline, commit, and repository directly in Telegram
+- **Secure webhook validation** - Validates incoming requests using per-repository secret tokens
+- **Flexible port configuration** - Binds to `0.0.0.0` with configurable port via `PORT` environment variable
+- **Graceful error handling** - Global uncaught exception and unhandled rejection handlers prevent silent crashes
+- **Diagnostics endpoint** - Health check endpoint that reports configuration status without exposing secrets
+- **Zero-downtime startup** - Bot initializes independently from the webhook server; missing credentials do not block server startup
 
 ## Tech Stack
 
@@ -96,7 +94,6 @@ pipeline-alertbot/
 │   ├── test-webhooks.js      # Webhook integration tests
 │   └── test-security.js      # Security validation tests
 ├── index.js                  # Root entry point (re-exports src/index.js)
-├── railway.json              # Railway deployment configuration
 ├── package.json              # Dependencies and npm scripts
 └── .env                      # Environment variables (not committed)
 ```
@@ -232,33 +229,25 @@ Configure a webhook **for each repository** you want to monitor:
 >
 > The bot only processes pipeline events with statuses: `running`, `success`, `failed`, and `canceled`. Other events are acknowledged but ignored.
 
-### Railway Deployment
+### Deployment
 
-The project includes a `railway.json` configuration for one-click deployment to [Railway](https://railway.com/):
+The application can be deployed to any platform that supports Node.js (Railway, Render, Fly.io, Docker, VPS, etc.):
 
-```json
-{
-  "$schema": "https://railway.com/railway.schema.json",
-  "build": {
-    "builder": "NIXPACKS"
-  },
-  "deploy": {
-    "startCommand": "node src/index.js"
-  }
-}
-```
-
-To deploy:
-
-1. Push the repository to GitHub.
-2. Connect the repository in your Railway dashboard.
-3. Add the required environment variables in Railway's variable editor:
+1. Set the required environment variables in your platform's configuration:
    - `TELEGRAM_BOT_TOKEN` -- your bot token
    - `REPOSITORY_CONFIG` -- single-line JSON array of repository mappings
-   - `ALERT_STYLE` -- optional global fallback style
-4. Railway will automatically build and deploy using Nixpacks.
+   - `ALERT_STYLE` -- optional global fallback style (default: `card`)
+   - `PORT` -- the port your platform assigns (default: `3000`)
+2. Set the start command to:
 
-The server binds to multiple ports (`3000`, `8080`, `5000`, `8000`, `4000`, `80`, `5952`) to handle Railway's dynamic port assignment.
+   ```bash
+   node src/index.js
+   ```
+
+3. Deploy. The server will bind to `0.0.0.0` on the configured port.
+
+> [!NOTE]
+> Make sure your deployment platform exposes the webhook endpoint publicly over HTTPS. GitLab requires SSL verification for webhooks in production.
 
 ## Usage
 
