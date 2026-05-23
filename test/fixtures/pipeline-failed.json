@@ -16,7 +16,7 @@
     "variables": []
   },
   "project": {
-    "id": 789,
+    "id": 148,
     "name": "my-awesome-project",
     "web_url": "https://gitlab.example.com/my-org/my-awesome-project",
     "git_http_url": "https://gitlab.example.com/my-org/my-awesome-project.git",
