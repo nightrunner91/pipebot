@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { logInfo, logError } = require('./logger');
 
 function parseRepositoryConfig(envConfig, fallbackGroupId, fallbackSecret, fallbackStyle) {
@@ -85,7 +86,15 @@ function validateWebhookSecret(repoConfig, incomingSecret) {
     if (!repoConfig.secret) {
         return true;
     }
-    return repoConfig.secret === incomingSecret;
+    if (!incomingSecret) {
+        return false;
+    }
+    const expected = Buffer.from(repoConfig.secret, 'utf8');
+    const provided = Buffer.from(incomingSecret, 'utf8');
+    if (expected.length !== provided.length) {
+        return false;
+    }
+    return crypto.timingSafeEqual(expected, provided);
 }
 
 module.exports = {

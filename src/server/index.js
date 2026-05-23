@@ -4,25 +4,57 @@ const { formatPipelineMessageWithKeyboard } = require('../services/gitlab');
 const { sendPipelineNotification } = require('../bot');
 const { findRepoConfig, validateWebhookSecret } = require('../utils/repo-config');
 
+const MAX_PAYLOAD_SIZE = '50kb';
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_MAX_REQUESTS = 100;
+
+function createRateLimiter() {
+    const requests = new Map();
+    return (req, res, next) => {
+        const ip = req.ip || req.connection.remoteAddress || 'unknown';
+        const now = Date.now();
+        const windowStart = now - RATE_LIMIT_WINDOW_MS;
+
+        if (!requests.has(ip)) {
+            requests.set(ip, []);
+        }
+
+        const ipRequests = requests.get(ip).filter((ts) => ts > windowStart);
+        requests.set(ip, ipRequests);
+
+        if (ipRequests.length >= RATE_LIMIT_MAX_REQUESTS) {
+            logError('Rate limit exceeded', { ip });
+            return res.status(429).send('Too Many Requests');
+        }
+
+        ipRequests.push(now);
+        next();
+    };
+}
+
+function addSecurityHeaders(req, res, next) {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '0');
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    res.setHeader('Content-Security-Policy', "default-src 'none'");
+    res.removeHeader('X-Powered-By');
+    next();
+}
+
 function createServer(bot, config, repositories) {
     const app = express();
-    app.use(express.json());
+    const rateLimiter = createRateLimiter();
+
+    app.use(addSecurityHeaders);
+    app.use(express.json({ limit: MAX_PAYLOAD_SIZE }));
+    app.use(rateLimiter);
 
     app.get('/', (req, res) => {
-        const diagnostics = {
+        res.status(200).json({
             status: 'running',
-            env: {
-                PORT: config.port,
-                HAS_TELEGRAM_BOT_TOKEN: !!config.botToken,
-                HAS_TELEGRAM_GROUP_ID: !!config.groupId,
-                HAS_GITLAB_WEBHOOK_SECRET: !!config.gitlabSecret,
-                HAS_REPOSITORY_CONFIG: !!config.repositoryConfig,
-                ALERT_STYLE: config.alertStyle || 'card',
-            },
-            botInitialized: !!bot,
-            registeredRepositories: repositories.size,
-        };
-        res.status(200).json(diagnostics);
+            timestamp: new Date().toISOString(),
+        });
     });
 
     app.post('/api/webhook/gitlab', async (req, res) => {
@@ -30,21 +62,23 @@ function createServer(bot, config, repositories) {
             logInfo('Received webhook request from GitLab');
 
             if (!bot) {
-                logError('Webhook processing failed: Telegram bot is not initialized (missing token)');
-                return res.status(500).send('Telegram bot is not initialized (missing token)');
+                logError('Webhook processing failed: Telegram bot is not initialized');
+                return res.status(503).send('Service Unavailable');
             }
 
             const payload = req.body;
+            if (!payload || typeof payload !== 'object') {
+                return res.status(400).send('Invalid payload');
+            }
+
             const incomingSecret = req.headers['x-gitlab-token'];
 
             // Find the repository config based on the payload
             const repoConfig = findRepoConfig(repositories, payload);
 
             if (!repoConfig) {
-                const projectId = payload.project?.id;
-                const projectPath = payload.project?.path_with_namespace;
-                logError('No repository config found for webhook', { projectId, projectPath });
-                return res.status(404).send('No repository configuration found for this project');
+                logError('No repository config found for webhook', { projectId: payload.project?.id });
+                return res.status(404).send('Not Found');
             }
 
             // Validate secret against repo-specific secret (or fallback)
@@ -57,12 +91,11 @@ function createServer(bot, config, repositories) {
                 kind: payload.object_kind,
                 status: payload.object_attributes?.status,
                 project: payload.project?.path_with_namespace,
-                targetChat: repoConfig.chatId,
             });
 
             if (payload.object_kind !== 'pipeline') {
                 logInfo('Ignored: not a pipeline event');
-                return res.status(200).send('Ignored: not a pipeline event');
+                return res.status(200).send('OK');
             }
 
             const status = payload.object_attributes?.status;
@@ -76,6 +109,23 @@ function createServer(bot, config, repositories) {
             logError('Error processing webhook', error);
             res.status(500).send('Internal Server Error');
         }
+    });
+
+    app.use((req, res) => {
+        res.status(404).send('Not Found');
+    });
+
+    app.use((err, req, res, next) => {
+        if (err.type === 'entity.parse.failed') {
+            logError('Invalid JSON in request body', err);
+            return res.status(400).send('Invalid JSON');
+        }
+        if (err.type === 'entity.too.large') {
+            logError('Request payload too large', err);
+            return res.status(413).send('Payload Too Large');
+        }
+        logError('Unhandled server error', err);
+        res.status(500).send('Internal Server Error');
     });
 
     return app;
