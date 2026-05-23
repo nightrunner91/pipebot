@@ -95,9 +95,11 @@ function formatTreeStyle(data) {
     if (data.stages) {
         msg += `\u251C\u2500 <b>Stages:</b> <code>${data.stages}</code>\n`;
     }
-    msg += `\u251C\u2500 <b>Author:</b> <code>${data.author}</code>\n`;
     if (data.duration && data.status !== 'running') {
+        msg += `\u251C\u2500 <b>Author:</b> <code>${data.author}</code>\n`;
         msg += `\u2514\u2500 <b>Duration:</b> <code>${data.duration}</code>\n`;
+    } else {
+        msg += `\u2514\u2500 <b>Author:</b> <code>${data.author}</code>\n`;
     }
     return msg;
 }
