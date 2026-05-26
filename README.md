@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-1.0.1-blue?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/Version-1.1.0-blue?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/License-ISC-green?style=for-the-badge" alt="License">
   <img src="https://img.shields.io/badge/Node.js-%3E%3D18-6da55f?style=for-the-badge&logo=node.js" alt="Node Version">
   <img src="https://img.shields.io/badge/Express-5.2.1-000000?style=for-the-badge&logo=express" alt="Express">
@@ -54,13 +54,19 @@
 - **Custom project names** - Override GitLab project names with your own display names in alerts
 - **Per-repo alert styles** - Each repository can use a different notification format (card, tree, or minimal)
 - **Stage-aware notifications** - Headers show the pipeline stage name (e.g., `Running [build]`, `Failed [deploy]`)
+- **Pipeline state tracking** - Detects stage transitions within a single pipeline run and sends per-stage notifications
 - **Per-repo notification filtering** - Control which statuses trigger alerts for each pipeline stage via `notifyRules`
 - **Per-repo deploy links** - Add custom action buttons (e.g., "Open Site", "View Swagger") to notifications via `deployLinks`
 - **Real-time pipeline alerts** - Receive instant notifications for running, successful, failed, and canceled pipelines
 - **Inline keyboard buttons** - Quick-access links to the pipeline, commit, and repository directly in Telegram
 - **Config file tool** - Manage repository configs in a readable JS file and generate env-ready JSON
-- **Secure webhook validation** - Validates incoming requests using per-repository secret tokens
-- **Flexible port configuration** - Binds to `0.0.0.0` with configurable port via `PORT` environment variable
+- **Secure webhook validation** - Validates incoming requests using per-repository secret tokens with timing-safe comparison
+- **Rate limiting** - Built-in rate limiter (100 requests per minute per IP) prevents abuse
+- **Security headers** - Adds HSTS, CSP, X-Frame-Options, and other security headers to all responses
+- **Payload size limit** - Rejects webhook payloads larger than 50kb
+- **Flexible port configuration** - Binds to `0.0.0.0` with configurable port via `PORT` environment variable; automatically tries fallback ports (3000, 8080, 5000, 8000, 4000, 80, 5952) if primary port is unavailable
+- **Bot long polling** - Telegram bot runs via long polling alongside the Express webhook server
+- **Bot commands** - Responds to `/start` command with a greeting message
 - **Graceful error handling** - Global uncaught exception and unhandled rejection handlers prevent silent crashes
 - **Diagnostics endpoint** - Health check endpoint that reports configuration status without exposing secrets
 - **Zero-downtime startup** - Bot initializes independently from the webhook server; missing credentials do not block server startup
@@ -83,13 +89,14 @@ pipebot/
 │   ├── bot/
 │   │   └── index.js          # Telegraf bot creation and message dispatch
 │   ├── server/
-│   │   └── index.js          # Express server: routes, webhook validation, payload routing
+│   │   └── index.js          # Express server: routes, webhook validation, payload routing, rate limiting
 │   ├── services/
 │   │   ├── gitlab.js         # GitLab payload formatting entry point
 │   │   └── message-builder.js # Message templates (card, tree, minimal) and HTML escaping
 │   └── utils/
-│       ├── logger.js         # Structured JSON logging (INFO/ERROR)
-│       └── repo-config.js    # Multi-repository config parser, routing, and notification filtering
+│       ├── logger.js         # Structured JSON logging (INFO/ERROR) with sensitive data sanitization
+│       ├── repo-config.js    # Multi-repository config parser, routing, and notification filtering
+│       └── pipeline-state.js # Stage transition detection and pipeline state tracking
 ├── config/
 │   └── repos.config.js       # Readable repository configuration (not committed)
 ├── scripts/
@@ -102,8 +109,11 @@ pipebot/
 │   │   └── pipeline-canceled.json
 │   ├── test-unit.js          # Unit tests for message formatting
 │   ├── test-repo-config.js   # Multi-repository config tests
+│   ├── test-pipeline-state.js # Pipeline state tracking tests
 │   ├── test-webhooks.js      # Webhook integration tests
-│   └── test-security.js      # Security validation tests
+│   ├── test-security.js      # Security validation tests
+│   ├── test-telegram.js      # Telegram bot tests
+│   └── test-visual.js        # Visual output tests
 ├── index.js                  # Root entry point (re-exports src/index.js)
 ├── package.json              # Dependencies and npm scripts
 └── .env                      # Environment variables (not committed)
@@ -234,7 +244,7 @@ The `notifyRules` field lets you control which pipeline statuses trigger notific
 - If `notifyRules` is **not present** at all, all events are sent (default behavior).
 - `send` **takes priority**: if a status is in both `send` and `ignore`, it is sent.
 - Valid statuses: `success`, `failed`, `running`, `canceled`, `pending`, `manual`.
-- The stage name is extracted from the GitLab payload (`detailed_status.context` or the first entry in `stages`). If the stage cannot be determined, it is treated as `"unknown"` -- if `"unknown"` is not in `notifyRules`, the event is sent.
+- The stage name is extracted from the GitLab payload (`builds[].stage`, `detailed_status.context`, or `stages`). If the stage cannot be determined, it is treated as `"unknown"` in `repo-config.js` or `"pipeline"` in `message-builder.js` -- if `"unknown"` is not in `notifyRules`, the event is sent.
 
 ### Deploy Links
 
@@ -278,7 +288,7 @@ All styles include an inline keyboard with buttons linking to the pipeline, comm
 ✅ Passed [test]
 ```
 
-The stage name is extracted from the GitLab payload (`detailed_status.context` or the first entry in `stages`). If neither is available, it falls back to `[pipeline]`.
+The stage name is extracted from the GitLab payload (`builds[].stage`, `detailed_status.context`, or `stages`). If none are available, it falls back to `[pipeline]`.
 
 ### Config File Tool
 
@@ -360,27 +370,18 @@ Expected output:
 
 - **URL**: `POST /api/webhook/gitlab`
 - **Headers**: `X-Gitlab-Token: <repo-secret>`
-- **Body**: GitLab pipeline event payload (JSON)
-- **Response**: `200 OK` on success, `401 Unauthorized` if the secret does not match, `404` if no repository config matches the project, `500` if bot is not initialized
+- **Body**: GitLab pipeline event payload (JSON, max 50kb)
+- **Response**: `200 OK` on success, `400 Bad Request` if payload is invalid JSON, `401 Unauthorized` if the secret does not match, `404` if no repository config matches the project, `413 Payload Too Large` if payload exceeds 50kb, `429 Too Many Requests` if rate limit exceeded, `500 Internal Server Error` on processing error, `503 Service Unavailable` if bot is not initialized
 
 ### Diagnostics Endpoint
 
 - **URL**: `GET /`
-- **Response**: JSON object with server status and configuration presence (no secrets exposed)
+- **Response**: JSON object with server status and timestamp
 
 ```json
 {
   "status": "running",
-  "env": {
-    "PORT": 3000,
-    "HAS_TELEGRAM_BOT_TOKEN": true,
-    "HAS_TELEGRAM_GROUP_ID": false,
-    "HAS_GITLAB_WEBHOOK_SECRET": false,
-    "HAS_REPOSITORY_CONFIG": true,
-    "ALERT_STYLE": "card"
-  },
-  "botInitialized": true,
-  "registeredRepositories": 2
+  "timestamp": "2026-05-26T20:53:57.063Z"
 }
 ```
 
@@ -392,12 +393,13 @@ Run the full test suite:
 npm test
 ```
 
-This executes four test suites in sequence:
+This executes five test suites in sequence:
 
 | Script | Description |
 |---|---|
 | `npm run test:unit` | Unit tests for message formatting, duration parsing, and stage formatting |
 | `npm run test:repo-config` | Multi-repository config parsing and routing tests |
+| `npm run test:pipeline-state` | Pipeline state tracking and stage transition detection tests |
 | `npm run test:webhooks` | Webhook integration tests with sample payloads |
 | `npm run test:security` | Security validation tests (token verification, input sanitization) |
 
@@ -413,8 +415,10 @@ Tests use fixture files in `test/fixtures/` that simulate real GitLab pipeline e
 | `npm test` | Run all tests |
 | `npm run test:unit` | Run unit tests only |
 | `npm run test:repo-config` | Run repository config tests only |
+| `npm run test:pipeline-state` | Run pipeline state tests only |
 | `npm run test:webhooks` | Run webhook tests only |
 | `npm run test:security` | Run security tests only |
+| `npm run test:telegram` | Run Telegram bot tests only |
 | `npm run config:build` | Print env-ready REPOSITORY_CONFIG JSON to stdout |
 | `npm run config:write` | Write REPOSITORY_CONFIG to .env |
 
@@ -428,7 +432,7 @@ Tests use fixture files in `test/fixtures/` that simulate real GitLab pipeline e
 
 ### Logging
 
-The application uses structured JSON logging via `src/utils/logger.js`. All log entries include a `level`, `timestamp`, `message`, and optional `context`. Errors additionally include `error` and `stack` fields. Logs are written to `stdout` (INFO) and `stderr` (ERROR) for easy integration with log aggregators.
+The application uses structured JSON logging via `src/utils/logger.js`. All log entries include a `level`, `timestamp`, `message`, and optional `context`. Errors additionally include `error` and `stack` fields. Sensitive data (tokens, secrets, passwords) is automatically sanitized in logs. Logs are written to `stdout` (INFO) and `stderr` (ERROR) for easy integration with log aggregators.
 
 ## License
 
