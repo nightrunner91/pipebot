@@ -1,4 +1,4 @@
-# <p align="center">pipebot</p>
+# <p align="center">Pipebot</p>
 
 <p align="center">
   <strong>Уведомления о GitLab CI/CD пайплайнах в Telegram в реальном времени.</strong>
