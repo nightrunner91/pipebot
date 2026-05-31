@@ -134,7 +134,6 @@ function formatTreeStyle(data) {
   let msg = `<b>${data.emoji} ${data.statusText} [${data.stageName}]</b>\n`;
   msg += `\n`;
   msg += `<b>${data.project}</b>\n`;
-  msg += `\u251C\u2500`;
   msg += `\u251C\u2500 <b>Branch:</b> <code>${data.ref}</code>\n`;
   msg += `\u251C\u2500 <b>Commit:</b> <code>${data.shortSha}</code>\n`;
   if (data.duration && data.status !== 'running') {
