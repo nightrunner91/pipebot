@@ -88,7 +88,7 @@ function extractData(payload, projectNameOverride) {
   const stageName = extractStageName(payload);
   const sha = payload.object_attributes?.sha || '';
   const shortSha = escapeHtml(sha.substring(0, 8));
-  const author = escapeHtml(payload.commit?.author?.name || 'Unknown');
+  const author = escapeHtml(payload.commit?.author?.name || payload.commit?.author_name || 'Unknown');
   const commitMsg = escapeHtml(payload.commit?.message?.trim().split('\n')[0] || '');
   const triggeredBy = escapeHtml(payload.user?.name || '');
   const pipelineUrl = payload._jobUrl

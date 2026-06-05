@@ -3,3 +3,4 @@
 /config/*.js
 !/config/*.example.js
 /scripts/
+/.playwright-mcp
