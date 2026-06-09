@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-1.2.0-blue?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/Version-1.3.0-blue?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/License-ISC-green?style=for-the-badge" alt="License">
   <img src="https://img.shields.io/badge/Node.js-%3E%3D18-6da55f?style=for-the-badge&logo=node.js" alt="Node Version">
   <img src="https://img.shields.io/badge/Express-5.2.1-000000?style=for-the-badge&logo=express" alt="Express">
@@ -40,6 +40,7 @@
   - [Running Locally](#running-locally)
   - [Webhook Endpoint](#webhook-endpoint)
   - [Diagnostics Endpoint](#diagnostics-endpoint)
+  - [Bot Commands](#bot-commands)
 - [Testing](#testing)
 - [Development](#development)
 - [License](#license)
@@ -395,6 +396,37 @@ Expected output:
   "status": "running",
   "timestamp": "2026-05-26T20:53:57.063Z"
 }
+```
+
+### Bot Commands
+
+The bot provides a set of interactive commands for monitoring and diagnostics. Send these commands directly in the Telegram chat where the bot is active.
+
+| Command | Description |
+|---|---|
+| `/start` | Initialize the bot and receive a greeting |
+| `/help` | Display all available commands |
+| `/ping` | Check bot latency |
+| `/status` | Show bot health, connected repos count, webhook mode, and uptime |
+| `/uptime` | Detailed uptime breakdown with start time |
+| `/version` | Bot version, Node.js version, platform, and memory usage |
+| `/info` | Bot description, features, and metadata |
+| `/repos` | List all monitored GitLab repositories |
+| `/repo <name>` | Get detailed info about a specific repository (notification rules, deploy links) |
+| `/health` | Run a health check on Telegram connection and GitLab API connectivity |
+| `/recent [count]` | Show recent pipeline notifications (default: 5, max: 20) |
+| `/alerts` | Show current notification style configuration |
+| `/chat_id` | Get the current chat ID for use in repos.config.js |
+| `/test_notification` | Send a test notification to verify the bot is working |
+
+**Examples:**
+
+```
+/repos                          # List all monitored repositories
+/repo Frontend Vue SPA          # Get details for "Frontend Vue SPA"
+/repo 148                       # Get details for project ID 148
+/recent                         # Show 5 most recent notifications
+/recent 10                      # Show 10 most recent notifications
 ```
 
 ## Testing

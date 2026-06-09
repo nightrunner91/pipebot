@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { createBot } = require('./bot');
+const { createBot, trackNotification } = require('./bot');
 const { createServer } = require('./server');
 const { parseRepositoryConfig } = require('./utils/repo-config');
 const { logInfo, logError } = require('./utils/logger');
@@ -40,7 +40,7 @@ logInfo(`Loaded ${repositories.size} repository configuration(s)`);
 let bot = null;
 if (config.botToken) {
     try {
-        bot = createBot(config.botToken);
+        bot = createBot(config.botToken, repositories);
         logInfo('Telegram bot initialized successfully');
         
         // Start bot with long polling (coexists with Express webhook server)

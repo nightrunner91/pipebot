@@ -1,7 +1,7 @@
 const express = require('express');
 const { logInfo, logError } = require('../utils/logger');
 const { formatPipelineMessageWithKeyboard } = require('../services/gitlab');
-const { sendPipelineNotification } = require('../bot');
+const { sendPipelineNotification, trackNotification } = require('../bot');
 const { findRepoConfig, validateWebhookSecret, shouldNotify, extractStageName, getDeployLink } = require('../utils/repo-config');
 const { detectStageTransitions, createPayloadForStage, clearOldStates, trackJobDuration, getCumulativeDuration } = require('../utils/pipeline-state');
 const { normalizeJobPayload } = require('../utils/job-normalizer');
@@ -135,6 +135,13 @@ function createServer(bot, config, repositories) {
                 const { message, reply_markup } = formatPipelineMessageWithKeyboard(normalized, repoConfig.style, repoConfig.projectName, deployLink);
                 await sendPipelineNotification(bot, repoConfig.chatId, message, reply_markup);
 
+                trackNotification({
+                    projectName: repoConfig.projectName,
+                    pipelineId: pipelineId,
+                    stage: stageName,
+                    status: status,
+                });
+
                 logInfo('Job notification sent', {
                     project: repoConfig.projectName,
                     stage: stageName,
@@ -198,6 +205,13 @@ function createServer(bot, config, repositories) {
                         const deployLink = getDeployLink(repoConfig, stageName, branchForDeploy);
                         const { message, reply_markup } = formatPipelineMessageWithKeyboard(stagePayload, repoConfig.style, repoConfig.projectName, deployLink);
                         await sendPipelineNotification(bot, repoConfig.chatId, message, reply_markup);
+
+                        trackNotification({
+                            projectName: repoConfig.projectName,
+                            pipelineId: payload.object_attributes?.id,
+                            stage: stageName,
+                            status: transition.currentStatus,
+                        });
                     }
                 } else if (!hasBuilds) {
                     if (!shouldNotify(repoConfig, payload)) {
@@ -214,6 +228,13 @@ function createServer(bot, config, repositories) {
                     const deployLink = getDeployLink(repoConfig, stageName, branchForDeploy);
                     const { message, reply_markup } = formatPipelineMessageWithKeyboard(payload, repoConfig.style, repoConfig.projectName, deployLink);
                     await sendPipelineNotification(bot, repoConfig.chatId, message, reply_markup);
+
+                    trackNotification({
+                        projectName: repoConfig.projectName,
+                        pipelineId: payload.object_attributes?.id,
+                        stage: stageName,
+                        status: payload.object_attributes?.status,
+                    });
                 }
             }
 
