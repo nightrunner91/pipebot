@@ -15,7 +15,7 @@
     "config:write": "node scripts/build-config.js --write"
   },
   "keywords": [],
-  "author": "",
+  "author": "nightrunner91",
   "license": "ISC",
   "description": "",
   "dependencies": {
