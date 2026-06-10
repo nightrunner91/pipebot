@@ -181,7 +181,10 @@ function shouldNotify(repoConfig, payload) {
     return true;
 }
 
-function getDeployLink(repoConfig, stageName, branch) {
+function getDeployLink(repoConfig, stageName, branch, status) {
+    if (status !== 'success') {
+        return null;
+    }
     const deployLinks = repoConfig?.deployLinks;
     if (!deployLinks || !stageName) {
         return null;

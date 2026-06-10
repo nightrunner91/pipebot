@@ -369,7 +369,7 @@ function runTests() {
                         deploy: { url: 'https://example.com', name: 'Open Site' }
                     }
                 };
-                const link = getDeployLink(repoConfig, 'deploy');
+                const link = getDeployLink(repoConfig, 'deploy', null, 'success');
                 assert(link !== null, 'Should return link');
                 assert(link.url === 'https://example.com', 'Should have correct URL');
                 assert(link.name === 'Open Site', 'Should have correct name');
@@ -383,7 +383,7 @@ function runTests() {
                         deploy: { url: 'https://example.com', name: 'Open Site' }
                     }
                 };
-                const link = getDeployLink(repoConfig, 'build');
+                const link = getDeployLink(repoConfig, 'build', null, 'success');
                 assert(link === null, 'Should return null for non-matching stage');
             },
         },
@@ -391,7 +391,7 @@ function runTests() {
             name: 'getDeployLink returns null when no deployLinks',
             run: () => {
                 const repoConfig = { chatId: '-100111' };
-                const link = getDeployLink(repoConfig, 'deploy');
+                const link = getDeployLink(repoConfig, 'deploy', null, 'success');
                 assert(link === null, 'Should return null when no deployLinks');
             },
         },
@@ -406,7 +406,7 @@ function runTests() {
                         ]
                     }
                 };
-                const link = getDeployLink(repoConfig, 'deploy', 'develop');
+                const link = getDeployLink(repoConfig, 'deploy', 'develop', 'success');
                 assert(link !== null, 'Should return link for matching branch');
                 assert(link.url === 'https://dev.example.com', 'Should return correct branch URL');
                 assert(link.name === 'Development', 'Should return correct branch name');
@@ -422,7 +422,7 @@ function runTests() {
                         ]
                     }
                 };
-                const link = getDeployLink(repoConfig, 'deploy', 'feature/foo');
+                const link = getDeployLink(repoConfig, 'deploy', 'feature/foo', 'success');
                 assert(link === null, 'Should return null when no branch matches');
             },
         },
@@ -436,8 +436,24 @@ function runTests() {
                         ]
                     }
                 };
-                const link = getDeployLink(repoConfig, 'deploy');
+                const link = getDeployLink(repoConfig, 'deploy', null, 'success');
                 assert(link === null, 'Should return null when branch is not provided');
+            },
+        },
+        {
+            name: 'getDeployLink returns null when status is not success',
+            run: () => {
+                const repoConfig = {
+                    deployLinks: {
+                        deploy: { url: 'https://example.com', name: 'Open Site' }
+                    }
+                };
+                const linkRunning = getDeployLink(repoConfig, 'deploy', null, 'running');
+                const linkFailed = getDeployLink(repoConfig, 'deploy', null, 'failed');
+                const linkCanceled = getDeployLink(repoConfig, 'deploy', null, 'canceled');
+                assert(linkRunning === null, 'Should return null for running status');
+                assert(linkFailed === null, 'Should return null for failed status');
+                assert(linkCanceled === null, 'Should return null for canceled status');
             },
         },
     ];
